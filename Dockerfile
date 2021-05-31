@@ -55,6 +55,9 @@ COPY --from=builder	/usr/local/php		/usr/local/php
 ADD etc/ /etc/
 ADD usr/ /usr/
 
+# Stop and disable apache2 so supervisor can run it
+RUN /etc/init.d/apache2 stop && rm -f /etc/init.d/apache2
+
 EXPOSE 80
 
 ENTRYPOINT ["/usr/bin/supervisord","-c","/etc/supervisord.conf"]
