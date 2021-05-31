@@ -1,29 +1,19 @@
-FROM php:fpm-stretch
+FROM php:fpm-stretch as builder
 
 # Setup necessary env vars
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
 
+# PHP dependencies
 # Basic Prep
 RUN apt-get update \
-    && apt-get install -y apache2 curl
-
-# Setup locales
-RUN apt-get install -y --no-install-recommends supervisor locales
-COPY locale/default /etc/default/locale
-COPY locale/locale.gen /etc/locale.gen
-RUN locale-gen
-
-# PHP dependencies
-RUN apt-get install -y --no-install-recommends \
-    zlib1g-dev libicu-dev build-essential libcurl4-openssl-dev \
+    && apt-get install -y --no-install-recommends \
+    zlib1g-dev libicu-dev build-essential libcurl4-openssl-dev curl \
     && docker-php-ext-install -j$(nproc) intl \
     && docker-php-ext-install -j$(nproc) mbstring \
     && docker-php-ext-install -j$(nproc) curl \
-    && docker-php-ext-install gettext \
-    && apt-get remove -y --purge zlib1g-dev libicu-dev build-essential libcurl4-openssl-dev \
-    && apt-get autoremove -y --purge
+    && docker-php-ext-install gettext 
 
 # Halcyon
 WORKDIR /opt/halcyon
@@ -34,16 +24,41 @@ RUN apt-get install -y --no-install-recommends git \
     && chown -R www-data: /opt/halcyon
 
 # PHP-fpm
-RUN \
 # Bring php-fpm configs into a more controallable state
-    rm /usr/local/etc/php-fpm.d/www.conf.default \
-    && mv /usr/local/etc/php-fpm.d/docker.conf /usr/local/etc/php-fpm.d/00-docker.conf \
-    && mv /usr/local/etc/php-fpm.d/www.conf /usr/local/etc/php-fpm.d/10-www.conf \
-    && mv /usr/local/etc/php-fpm.d/zz-docker.conf /usr/local/etc/php-fpm.d/20-docker.conf
+#RUN rm /usr/local/etc/php-fpm.d/www.conf.default \
+#    && mv /usr/local/etc/php-fpm.d/docker.conf /usr/local/etc/php-fpm.d/00-docker.conf \
+#    && mv /usr/local/etc/php-fpm.d/www.conf /usr/local/etc/php-fpm.d/10-www.conf \
+#    && mv /usr/local/etc/php-fpm.d/zz-docker.conf /usr/local/etc/php-fpm.d/20-docker.conf
+
+from php:apache-stretch
+# Setup necessary env vars
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
+
+# Add supervisor
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends  supervisor locales
+
+# Setup locales
+COPY locale/default /etc/default/locale
+COPY locale/locale.gen /etc/locale.gen
+RUN locale-gen
 
 # Copy necessary configs
+#COPY --from=builder	/usr/local/etc/php-fpm.d	/usr/local/etc/php-fpm.d
+COPY --from=builder	/opt/halcyon		/opt/halcyon
+COPY --from=builder	/usr/local/include/php	/usr/local/include/php
+COPY --from=builder	/usr/local/lib/php		/usr/local/lib/php
+COPY --from=builder	/usr/local/php		/usr/local/php
+
 ADD etc/ /etc/
 ADD usr/ /usr/
+
+# Stop and disable apache2 so supervisor can run it
+RUN /etc/init.d/apache2 stop && rm -f /etc/init.d/apache2 ; \
+	chown -R www-data: /opt/halcyon && chmod -R a+X,og+rw /opt/halcyon ; \
+	ln -s /opt/halcyon /var/www/html
 
 EXPOSE 80
 
