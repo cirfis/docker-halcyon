@@ -1,4 +1,5 @@
 FROM php:fpm 
+LABEL org.opencontainers.image.source https://github.com/cirfis/docker-halcyon
 
 # Setup necessary env vars
 ENV DEBIAN_FRONTEND=noninteractive
